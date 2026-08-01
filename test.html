@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supabase 连接测试</title>
+<style>
+body{font-family:-apple-system,sans-serif;max-width:600px;margin:40px auto;padding:20px;background:#f5f5f5}
+h1{font-size:20px;margin-bottom:20px}
+.step{background:#fff;border-radius:8px;padding:16px;margin-bottom:12px;border:1px solid #e0e0e0}
+.step .label{font-weight:600;margin-bottom:8px}
+.ok{color:#059669}.fail{color:#dc2626}.wait{color:#d97706}
+pre{background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;white-space:pre-wrap;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>🔍 Supabase 连接诊断</h1>
+
+<div class="step" id="s1">
+  <div class="label">1. SDK 加载</div>
+  <div class="wait">⏳ 加载中...</div>
+</div>
+
+<div class="step" id="s2">
+  <div class="label">2. 数据库连接</div>
+  <div class="wait">⏳ 等待 SDK...</div>
+</div>
+
+<div class="step" id="s3">
+  <div class="label">3. 存储桶检查</div>
+  <div class="wait">⏳ 等待连接...</div>
+</div>
+
+<div class="step" id="s4">
+  <div class="label">4. 诊断结论</div>
+  <div class="wait">⏳ 等待所有检查完成...</div>
+</div>
+
+<script>
+const URL_ = 'https://johvesdjapfjbeqhnlwq.supabase.co';
+const KEY_ = 'sb_publishable_sMOaj9BdQvS1nDbrTIuFIQ_BiZVQtkF';
+
+function setStatus(id, ok, msg, detail) {
+  const el = document.getElementById(id);
+  const cls = ok ? 'ok' : 'fail';
+  const icon = ok ? '✅' : '❌';
+  let html = '<div class="' + cls + '">' + icon + ' ' + msg + '</div>';
+  if (detail) html += '<pre>' + detail + '</pre>';
+  el.innerHTML = '<div class="label">' + el.querySelector('.label').textContent + '</div>' + html;
+}
+
+// Step 1: Check SDK
+function checkSDK() {
+  const sb = window.supabase;
+  if (!sb) {
+    setStatus('s1', false, 'SDK 未加载', 'window.supabase 不存在');
+    return null;
+  }
+  const createClient = sb.createClient || (sb.supabase && sb.supabase.createClient);
+  if (!createClient) {
+    setStatus('s1', false, 'SDK 加载了但 createClient 不存在',
+      'window.supabase 的 keys: ' + Object.keys(sb).join(', '));
+    return null;
+  }
+  setStatus('s1', true, 'SDK 加载成功', 'createClient 可用');
+  return createClient;
+}
+
+// Step 2: DB connection
+async function checkDB(client) {
+  try {
+    const { data, error } = await client.from('kb_files').select('id').limit(1);
+    if (error) {
+      setStatus('s2', false, '数据库查询失败', JSON.stringify(error, null, 2));
+      return false;
+    }
+    setStatus('s2', true, '数据库连接正常', '查询结果: ' + JSON.stringify(data));
+    return true;
+  } catch(e) {
+    setStatus('s2', false, '数据库连接异常', e.message + '\n' + e.stack);
+    return false;
+  }
+}
+
+// Step 3: Storage check
+async function checkStorage(client) {
+  try {
+    const { data, error } = await client.storage.from('kb-files').list();
+    if (error) {
+      setStatus('s3', false, '存储桶检查失败', JSON.stringify(error, null, 2));
+      return false;
+    }
+    setStatus('s3', true, '存储桶正常', '文件数: ' + (data ? data.length : 0));
+    return true;
+  } catch(e) {
+    setStatus('s3', false, '存储桶异常', e.message);
+    return false;
+  }
+}
+
+// Run all checks
+async function run() {
+  const createClient = checkSDK();
+  if (!createClient) {
+    setStatus('s4', false, 'SDK 未加载，无法继续', '请检查浏览器控制台 (F12) 的 Network 标签，看 supabase SDK 的脚本是否加载成功');
+    return;
+  }
+
+  let client;
+  try {
+    client = createClient(URL_, KEY_);
+  } catch(e) {
+    setStatus('s2', false, '创建客户端失败', e.message);
+    setStatus('s4', false, '初始化失败', e.message);
+    return;
+  }
+
+  const dbOk = await checkDB(client);
+  const storageOk = await checkStorage(client);
+
+  if (dbOk && storageOk) {
+    setStatus('s4', true, '全部通过！Supabase 连接正常',
+      'URL: ' + URL_ + '\n数据库: ✅\n存储桶: ✅\n\n你的知识库可以正常使用！');
+  } else {
+    let msg = [];
+    if (!dbOk) msg.push('数据库连接失败');
+    if (!storageOk) msg.push('存储桶不可用');
+    setStatus('s4', false, '部分检查未通过', msg.join('\n'));
+  }
+}
+
+// Wait for SDK to load, then run
+let attempts = 0;
+function waitAndRun() {
+  attempts++;
+  if (window.supabase || attempts > 50) {
+    run();
+  } else {
+    setTimeout(waitAndRun, 100);
+  }
+}
+waitAndRun();
+</script>
+</body>
+</html>
