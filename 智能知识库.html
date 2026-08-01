@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能知识库</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#4F46E5;--primary-light:#EEF2FF;--primary-dark:#3730A3;--bg:#F1F5F9;--card:#fff;--text:#1E293B;--text2:#64748B;--text3:#94A3B8;--border:#E2E8F0;--success:#10B981;--warning:#F59E0B;--danger:#EF4444;--sidebar-w:260px;--detail-w:380px;--radius:10px;--shadow:0 1px 3px rgba(0,0,0,.08)}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:14px}
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:60px 1fr;height:100vh}
+.header{grid-column:1/-1;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;z-index:10}
+.header .logo{font-size:18px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:8px;min-width:200px}
+.header .logo svg{width:28px;height:28px}
+.cloud-badge{font-size:10px;background:#ECFDF5;color:#059669;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:4px}
+.search-box{flex:1;max-width:480px;position:relative}
+.search-box input{width:100%;padding:8px 16px 8px 40px;border:1px solid var(--border);border-radius:8px;font-size:14px;outline:none;transition:border .2s}
+.search-box input:focus{border-color:var(--primary)}
+.search-box svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);width:18px;height:18px}
+.header-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;transition:all .15s}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)}.btn-ghost:hover{background:var(--bg)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-danger{background:var(--danger);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.sidebar{background:var(--card);border-right:1px solid var(--border);overflow-y:auto;padding:16px 0}
+.sidebar-section{padding:0 16px;margin-bottom:20px}
+.sidebar-title{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.cat-item{display:flex;align-items:center;gap:10px;padding:8px 16px;cursor:pointer;border-radius:0;transition:background .15s;font-size:13px;color:var(--text2);position:relative}
+.cat-item:hover{background:var(--bg)}
+.cat-item.active{background:var(--primary-light);color:var(--primary);font-weight:600}
+.cat-item .icon{width:20px;text-align:center;font-size:15px}
+.cat-item .count{margin-left:auto;background:var(--bg);padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;color:var(--text3)}
+.cat-item.active .count{background:var(--primary);color:#fff}
+.tag-cloud{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px}
+.tag-pill{padding:3px 10px;border-radius:12px;font-size:11px;background:var(--bg);color:var(--text2);cursor:pointer;transition:all .15s;border:1px solid transparent}
+.tag-pill:hover{border-color:var(--primary);color:var(--primary)}
+.tag-pill.active{background:var(--primary);color:#fff}
+.main{overflow-y:auto;padding:24px}
+.main-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.main-header h2{font-size:20px;font-weight:700}
+.file-count{color:var(--text3);font-size:13px}
+.sort-select{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;cursor:pointer}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;margin-bottom:24px;transition:all .2s;cursor:pointer;background:var(--card)}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--primary);background:var(--primary-light)}
+.upload-zone svg{width:40px;height:40px;color:var(--text3);margin-bottom:12px}
+.upload-zone p{color:var(--text2);font-size:14px}
+.upload-zone .hint{font-size:12px;color:var(--text3);margin-top:6px}
+.upload-progress{margin-top:12px;display:none}
+.upload-progress .bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.upload-progress .bar-fill{height:100%;background:var(--primary);border-radius:2px;transition:width .3s;width:0}
+.upload-progress .status{font-size:12px;color:var(--text2);margin-top:6px}
+.file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.file-card{background:var(--card);border-radius:var(--radius);border:1px solid var(--border);padding:16px;cursor:pointer;transition:all .2s;position:relative}
+.file-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.1);transform:translateY(-1px)}
+.file-card.selected{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-light)}
+.file-card .file-icon{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px}
+.file-icon.pdf{background:#FEE2E2;color:#DC2626}
+.file-icon.docx,.file-icon.doc{background:#DBEAFE;color:#2563EB}
+.file-icon.pptx,.file-icon.ppt{background:#FEF3C7;color:#D97706}
+.file-icon.xlsx,.file-icon.xls,.file-icon.csv{background:#D1FAE5;color:#059669}
+.file-icon.other{background:var(--bg);color:var(--text3)}
+.file-card .file-name{font-weight:600;font-size:14px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-card .file-meta{font-size:12px;color:var(--text3);display:flex;gap:12px;margin-bottom:8px}
+.file-card .file-cat{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:500;background:var(--primary-light);color:var(--primary)}
+.file-card .file-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
+.file-card .file-tags span{padding:1px 6px;border-radius:4px;font-size:10px;background:var(--bg);color:var(--text3)}
+.detail-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.3);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
+.detail-overlay.open{opacity:1;pointer-events:auto}
+.detail-panel{position:fixed;top:0;right:0;width:var(--detail-w);height:100vh;background:var(--card);z-index:51;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,.1)}
+.detail-panel.open{transform:translateX(0)}
+.detail-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.detail-header h3{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:12px}
+.detail-close{width:32px;height:32px;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text2)}
+.detail-close:hover{background:var(--bg)}
+.detail-body{flex:1;overflow-y:auto;padding:20px}
+.detail-section{margin-bottom:20px}
+.detail-section label{font-size:12px;font-weight:600;color:var(--text3);display:block;margin-bottom:6px}
+.detail-preview{background:var(--bg);border-radius:8px;padding:16px;min-height:200px;max-height:400px;overflow:auto}
+.detail-preview iframe{width:100%;height:350px;border:none;border-radius:6px}
+.detail-preview .doc-content{font-size:13px;line-height:1.6;color:var(--text)}
+.detail-info{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.detail-info .info-item{background:var(--bg);padding:10px;border-radius:8px}
+.detail-info .info-item label{font-size:11px;color:var(--text3);margin-bottom:2px}
+.detail-info .info-item .val{font-size:13px;font-weight:500}
+.detail-cat-select{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;outline:none}
+.detail-cat-select:focus{border-color:var(--primary)}
+.detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.detail-tags .tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:12px;background:var(--primary-light);color:var(--primary)}
+.detail-tags .tag .remove{cursor:pointer;font-size:14px;line-height:1;opacity:.6}
+.detail-tags .tag .remove:hover{opacity:1}
+.tag-input-row{display:flex;gap:6px}
+.tag-input-row input{flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;outline:none}
+.tag-input-row input:focus{border-color:var(--primary)}
+.detail-notes textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;resize:vertical;min-height:100px;outline:none;font-family:inherit;line-height:1.5}
+.detail-notes textarea:focus{border-color:var(--primary)}
+.detail-actions{padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:8px}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
+.empty-state svg{width:64px;height:64px;margin-bottom:16px;opacity:.4}
+.empty-state p{font-size:15px;margin-bottom:6px}
+.empty-state .hint{font-size:13px}
+.stats-bar{display:flex;gap:16px;margin-bottom:20px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;flex:1}
+.stat-card .stat-val{font-size:24px;font-weight:700;color:var(--primary)}
+.stat-card .stat-label{font-size:12px;color:var(--text3);margin-top:2px}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:100;transform:translateY(80px);opacity:0;transition:all .3s}
+.toast.show{transform:translateY(0);opacity:1}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+.hidden{display:none!important}
+.loading-spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.conn-status{display:flex;align-items:center;gap:6px;font-size:11px;padding:8px 16px}
+.conn-dot{width:8px;height:8px;border-radius:50%}
+.conn-dot.online{background:var(--success)}
+.conn-dot.offline{background:var(--danger)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M8 7h8M8 11h6"/></svg>
+      智能知识库 <span class="cloud-badge">☁️ 云端</span>
+    </div>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" id="searchInput" placeholder="搜索文件名、内容、标签...">
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        上传文件
+      </button>
+      <input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.docx,.pptx,.doc,.ppt,.xlsx,.xls,.csv,.txt,.md" onchange="handleFiles(this.files)">
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="conn-status" id="connStatus">
+      <span class="conn-dot offline"></span>
+      <span>连接中...</span>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">分类</div>
+      <div id="categoryList"></div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">标签</div>
+      <div class="tag-cloud" id="tagCloud"></div>
+    </div>
+    <div class="sidebar-section" style="margin-top:auto;padding-top:16px;border-top:1px solid var(--border)">
+      <div class="sidebar-title">存储</div>
+      <div id="storageInfo" style="font-size:12px;color:var(--text3);padding:0 16px"></div>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent">
+    <div class="stats-bar" id="statsBar"></div>
+    <div class="upload-zone" id="uploadZone"
+         ondragover="event.preventDefault();this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="event.preventDefault();this.classList.remove('dragover');handleFiles(event.dataTransfer.files)"
+         onclick="document.getElementById('fileInput').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+      <p>拖拽文件到这里，或点击上传</p>
+      <div class="hint">支持 PDF、Word、PPT、Excel、TXT 等格式 · 文件存储在云端</div>
+      <div class="upload-progress" id="uploadProgress">
+        <div class="bar"><div class="bar-fill" id="progressBar"></div></div>
+        <div class="status" id="progressStatus">准备上传...</div>
+      </div>
+    </div>
+    <div class="main-header">
+      <div>
+        <h2 id="viewTitle">全部文件</h2>
+        <span class="file-count" id="fileCount"></span>
+      </div>
+      <select class="sort-select" id="sortSelect" onchange="renderFiles()">
+        <option value="newest">最新上传</option>
+        <option value="oldest">最早上传</option>
+        <option value="name">按名称</option>
+        <option value="size">按大小</option>
+      </select>
+    </div>
+    <div class="file-grid" id="fileGrid"></div>
+    <div class="empty-state hidden" id="emptyState">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+      <p>还没有文件</p>
+      <div class="hint">上传文件后，AI 会自动帮你分类</div>
+    </div>
+  </main>
+</div>
+
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-header">
+    <h3 id="detailName"></h3>
+    <button class="detail-close" onclick="closeDetail()">✕</button>
+  </div>
+  <div class="detail-body">
+    <div class="detail-section">
+      <label>文件预览</label>
+      <div class="detail-preview" id="detailPreview"></div>
+    </div>
+    <div class="detail-section">
+      <label>文件信息</label>
+      <div class="detail-info" id="detailInfo"></div>
+    </div>
+    <div class="detail-section">
+      <label>分类</label>
+      <select class="detail-cat-select" id="detailCat" onchange="updateFileCategory()"></select>
+    </div>
+    <div class="detail-section">
+      <label>标签</label>
+      <div class="detail-tags" id="detailTags"></div>
+      <div class="tag-input-row">
+        <input type="text" id="tagInput" placeholder="输入标签，回车添加" onkeydown="if(event.key==='Enter')addTagToFile()">
+        <button class="btn btn-sm btn-ghost" onclick="addTagToFile()">添加</button>
+      </div>
+    </div>
+    <div class="detail-section detail-notes">
+      <label>备注</label>
+      <textarea id="detailNotes" placeholder="添加备注..." oninput="saveNotes()"></textarea>
+    </div>
+  </div>
+  <div class="detail-actions">
+    <button class="btn btn-ghost" onclick="downloadFile()" style="flex:1">📥 下载</button>
+    <button class="btn btn-ghost" onclick="reclassifyFile()" style="flex:1">🤖 重新分类</button>
+    <button class="btn btn-danger btn-sm" onclick="deleteFile()">🗑️</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// Supabase 配置
+// ============================================================
+const SUPABASE_URL = 'https://johvesdjapfjbeqhnlwq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_sMOaj9BdQvS1nDbrTIuFIQ_BiZVQtkF';
+
+let supabase;
+try {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+} catch(e) {
+  console.error('Supabase init failed:', e);
+}
+
+// PDF.js worker
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ============================================================
+// 分类配置
+// ============================================================
+const CATEGORIES = {
+  'customer':   {name:'客户资料', icon:'👥', keywords:['客户','customer','合同','签约','甲方','乙方','合作','订单','采购','供应商','渠道','代理商','经销商','客户名单','联系方式','拜访','跟进','商机','线索','成交','续约','回款']},
+  'product':    {name:'产品文档', icon:'📦', keywords:['产品','product','功能','feature','版本','version','更新','update','需求','requirement','PRD','原型','设计','规格','参数','配置','手册','使用说明','操作指南','FAQ']},
+  'proposal':   {name:'方案提案', icon:'📋', keywords:['方案','solution','提案','proposal','规划','plan','策划','设计','实施','部署','架构','framework','蓝图','roadmap','里程碑','目标','策略','战略']},
+  'contract':   {name:'合同协议', icon:'📝', keywords:['合同','contract','协议','agreement','条款','clause','签章','盖章','法人','授权','保密','NDA','SLA','服务等级','违约','赔偿','期限','续签','终止']},
+  'training':   {name:'培训学习', icon:'📚', keywords:['培训','training','学习','课程','course','教程','tutorial','知识','认证','考试','证书','技能','提升','分享','讲座','workshop','新人','入职']},
+  'finance':    {name:'财务数据', icon:'💰', keywords:['财务','finance','报表','report','预算','budget','成本','cost','收入','revenue','利润','profit','发票','invoice','报销','费用','支出','营收','毛利','净利','现金流','资产']},
+  'tech':       {name:'技术文档', icon:'⚙️', keywords:['技术','tech','API','接口','代码','code','系统','system','服务器','server','数据库','database','部署','deploy','运维','监控','日志','性能','安全','架构','微服务','SDK']},
+  'marketing':  {name:'市场营销', icon:'📢', keywords:['市场','marketing','推广','营销','品牌','brand','广告','advertisement','活动','campaign','渠道','获客','转化','SEO','SEM','内容营销','社媒','公关','PR']},
+  'hr':         {name:'人事行政', icon:'🏢', keywords:['人事','HR','招聘','薪资','salary','考勤','绩效','KPI','OKR','制度','policy','流程','审批','行政','办公','出差','请假','福利','社保','公积金']},
+  'report':     {name:'报告总结', icon:'📊', keywords:['报告','report','总结','summary','分析','analysis','周报','月报','季报','年报','复盘','回顾','数据','指标','趋势','同比','环比','排名','业绩']},
+  'internal':   {name:'公司内部', icon:'🏠', keywords:['公司','company','内部','internal','通知','notice','公告','announcement','会议','meeting','纪要','决议','组织','部门','团队','文化','价值观']},
+  'other':      {name:'其他文件', icon:'📁', keywords:[]}
+};
+
+// ============================================================
+// 状态
+// ============================================================
+let allFiles = [];
+let currentCategory = 'all';
+let currentTag = null;
+let currentSearch = '';
+let selectedFileId = null;
+let notesTimer = null;
+
+// ============================================================
+// 连接检测
+// ============================================================
+async function checkConnection() {
+  const el = document.getElementById('connStatus');
+  try {
+    const { data, error } = await supabase.from('kb_files').select('id').limit(1);
+    if (error) throw error;
+    el.innerHTML = '<span class="conn-dot online"></span><span>云端已连接</span>';
+    return true;
+  } catch(e) {
+    el.innerHTML = '<span class="conn-dot offline"></span><span>连接失败: ' + (e.message || '请检查网络') + '</span>';
+    return false;
+  }
+}
+
+// ============================================================
+// 文本提取
+// ============================================================
+async function extractText(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  try {
+    if (ext === 'pdf') return await extractPDF(file);
+    if (ext === 'docx') return await extractDOCX(file);
+    if (ext === 'pptx') return await extractPPTX(file);
+    if (['txt','md','csv'].includes(ext)) return await file.text();
+    return '';
+  } catch(e) {
+    console.warn('文本提取失败:', e);
+    return '';
+  }
+}
+
+async function extractPDF(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  let text = '';
+  const maxPages = Math.min(pdf.numPages, 20);
+  for (let i = 1; i <= maxPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+async function extractDOCX(file) {
+  const buf = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({arrayBuffer: buf});
+  return result.value;
+}
+
+async function extractPPTX(file) {
+  const buf = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(buf);
+  let text = '';
+  const slideFiles = Object.keys(zip.files).filter(f => f.match(/ppt\/slides\/slide\d+\.xml$/));
+  for (const sf of slideFiles.slice(0, 20)) {
+    const content = await zip.files[sf].async('text');
+    const matches = content.match(/<a:t>([^<]*)<\/a:t>/g);
+    if (matches) text += matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ') + '\n';
+  }
+  return text;
+}
+
+// ============================================================
+// AI 分类
+// ============================================================
+function classifyFile(filename, text) {
+  const combined = (filename + ' ' + text).toLowerCase();
+  const scores = {};
+  for (const [key, cat] of Object.entries(CATEGORIES)) {
+    if (key === 'other') continue;
+    let score = 0;
+    for (const kw of cat.keywords) {
+      const regex = new RegExp(kw.toLowerCase(), 'g');
+      const matches = combined.match(regex);
+      if (matches) score += matches.length * (kw.length > 2 ? 2 : 1);
+    }
+    scores[key] = score;
+  }
+  const best = Object.entries(scores).sort((a,b) => b[1] - a[1])[0];
+  if (best && best[1] > 0) return { category: best[0], confidence: Math.min(best[1] / 10, 1) };
+  return { category: 'other', confidence: 0 };
+}
+
+function suggestTags(filename, text) {
+  const combined = (filename + ' ' + text).toLowerCase();
+  const tagKeywords = {
+    '客户': ['客户','customer','甲方','乙方'],
+    '合同': ['合同','contract','协议','agreement'],
+    '产品': ['产品','product','功能','feature'],
+    '方案': ['方案','solution','提案','proposal'],
+    '报告': ['报告','report','总结','summary'],
+    '财务': ['财务','finance','预算','budget','报表'],
+    '技术': ['技术','tech','API','代码','系统'],
+    '培训': ['培训','training','学习','课程'],
+    '营销': ['营销','marketing','推广','品牌'],
+    '数据': ['数据','data','分析','analysis','指标'],
+    '设计': ['设计','design','UI','UX','原型'],
+    '会议': ['会议','meeting','纪要'],
+    '项目': ['项目','project','里程碑','进度'],
+    '人事': ['人事','HR','招聘','绩效','考勤'],
+  };
+  const tags = [];
+  for (const [tag, kws] of Object.entries(tagKeywords)) {
+    for (const kw of kws) {
+      if (combined.includes(kw.toLowerCase())) { tags.push(tag); break; }
+    }
+  }
+  return tags.slice(0, 5);
+}
+
+// ============================================================
+// Supabase CRUD
+// ============================================================
+async function loadFiles() {
+  try {
+    const { data, error } = await supabase
+      .from('kb_files')
+      .select('*')
+      .order('upload_date', { ascending: false });
+    if (error) throw error;
+    allFiles = (data || []).map(row => ({
+      id: row.id,
+      name: row.name,
+      size: row.size,
+      type: row.type,
+      ext: row.ext,
+      category: row.category,
+      confidence: row.confidence,
+      tags: row.tags || [],
+      notes: row.notes || '',
+      uploadDate: row.upload_date,
+      textContent: row.text_content || '',
+      storagePath: row.storage_path || ''
+    }));
+  } catch(e) {
+    console.error('加载文件失败:', e);
+    showToast('加载失败: ' + e.message);
+    allFiles = [];
+  }
+  renderCategories();
+  renderTags();
+  renderFiles();
+  renderStats();
+  updateStorageInfo();
+}
+
+async function uploadFileToCloud(file, record) {
+  const storagePath = `${record.id}/${file.name}`;
+  const { data, error } = await supabase.storage
+    .from('kb-files')
+    .upload(storagePath, file, { upsert: false });
+  if (error) throw error;
+  return storagePath;
+}
+
+async function insertFileRecord(record) {
+  const { data, error } = await supabase.from('kb_files').insert({
+    id: record.id,
+    name: record.name,
+    size: record.size,
+    type: record.type,
+    ext: record.ext,
+    category: record.category,
+    confidence: record.confidence,
+    tags: record.tags,
+    notes: record.notes,
+    upload_date: record.uploadDate,
+    text_content: record.textContent,
+    storage_path: record.storagePath
+  });
+  if (error) throw error;
+}
+
+async function updateFileRecord(id, updates) {
+  const dbUpdates = {};
+  if (updates.category !== undefined) dbUpdates.category = updates.category;
+  if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+  if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+  if (updates.confidence !== undefined) dbUpdates.confidence = updates.confidence;
+  
+  const { error } = await supabase.from('kb_files').update(dbUpdates).eq('id', id);
+  if (error) throw error;
+}
+
+async function deleteFileRecord(id, storagePath) {
+  await supabase.from('kb_files').delete().eq('id', id);
+  if (storagePath) {
+    await supabase.storage.from('kb-files').remove([storagePath]);
+  }
+}
+
+// ============================================================
+// 文件处理
+// ============================================================
+async function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  if (!files.length) return;
+  
+  const progressEl = document.getElementById('uploadProgress');
+  const barEl = document.getElementById('progressBar');
+  const statusEl = document.getElementById('progressStatus');
+  progressEl.style.display = 'block';
+  
+  let successCount = 0;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const pct = Math.round(((i) / files.length) * 100);
+    barEl.style.width = pct + '%';
+    statusEl.textContent = `正在处理 (${i+1}/${files.length}): ${file.name}`;
+    
+    try {
+      const id = 'f_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+      
+      // 1. 提取文本
+      statusEl.textContent = `提取内容 (${i+1}/${files.length}): ${file.name}`;
+      const text = await extractText(file);
+      
+      // 2. AI 分类
+      const classification = classifyFile(file.name, text);
+      const tags = suggestTags(file.name, text);
+      
+      // 3. 上传文件到 Supabase Storage
+      statusEl.textContent = `上传云端 (${i+1}/${files.length}): ${file.name}`;
+      const storagePath = await uploadFileToCloud(file, { id });
+      
+      // 4. 插入数据库记录
+      const record = {
+        id,
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        ext: file.name.split('.').pop().toLowerCase(),
+        category: classification.category,
+        confidence: classification.confidence,
+        tags,
+        notes: '',
+        uploadDate: new Date().toISOString(),
+        textContent: text.substring(0, 50000),
+        storagePath
+      };
+      await insertFileRecord(record);
+      successCount++;
+    } catch(e) {
+      console.error('上传失败:', file.name, e);
+      showToast('上传失败: ' + file.name + ' - ' + e.message);
+    }
+  }
+  
+  barEl.style.width = '100%';
+  statusEl.textContent = `完成! ${successCount}/${files.length} 个文件上传成功`;
+  
+  setTimeout(() => { progressEl.style.display = 'none'; barEl.style.width = '0'; }, 2000);
+  
+  await loadFiles();
+  showToast(`✅ ${successCount} 个文件上传完成，已自动分类`);
+  document.getElementById('fileInput').value = '';
+}
+
+// ============================================================
+// UI 渲染
+// ============================================================
+function renderCategories() {
+  const counts = {all: allFiles.length};
+  for (const key of Object.keys(CATEGORIES)) counts[key] = 0;
+  for (const f of allFiles) counts[f.category] = (counts[f.category] || 0) + 1;
+  
+  let html = `<div class="cat-item ${currentCategory==='all'?'active':''}" onclick="filterCategory('all')">
+    <span class="icon">📂</span>全部文件<span class="count">${counts.all}</span></div>`;
+  
+  for (const [key, cat] of Object.entries(CATEGORIES)) {
+    if (counts[key] === 0 && key !== 'other') continue;
+    html += `<div class="cat-item ${currentCategory===key?'active':''}" onclick="filterCategory('${key}')">
+      <span class="icon">${cat.icon}</span>${cat.name}<span class="count">${counts[key]}</span></div>`;
+  }
+  document.getElementById('categoryList').innerHTML = html;
+}
+
+function renderTags() {
+  const tagCounts = {};
+  for (const f of allFiles) {
+    for (const t of f.tags || []) tagCounts[t] = (tagCounts[t] || 0) + 1;
+  }
+  const sorted = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]);
+  let html = '';
+  for (const [tag, count] of sorted) {
+    html += `<span class="tag-pill ${currentTag===tag?'active':''}" onclick="filterTag('${tag}')">${tag} (${count})</span>`;
+  }
+  if (!sorted.length) html = '<span style="font-size:12px;color:var(--text3)">上传文件后自动生成标签</span>';
+  document.getElementById('tagCloud').innerHTML = html;
+}
+
+function renderFiles() {
+  let files = [...allFiles];
+  if (currentCategory !== 'all') files = files.filter(f => f.category === currentCategory);
+  if (currentTag) files = files.filter(f => (f.tags || []).includes(currentTag));
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    files = files.filter(f =>
+      f.name.toLowerCase().includes(q) ||
+      (f.textContent || '').toLowerCase().includes(q) ||
+      (f.tags || []).some(t => t.includes(q)) ||
+      (f.notes || '').toLowerCase().includes(q)
+    );
+  }
+  
+  const sort = document.getElementById('sortSelect').value;
+  files.sort((a, b) => {
+    if (sort === 'newest') return new Date(b.uploadDate) - new Date(a.uploadDate);
+    if (sort === 'oldest') return new Date(a.uploadDate) - new Date(b.uploadDate);
+    if (sort === 'name') return a.name.localeCompare(b.name, 'zh');
+    if (sort === 'size') return b.size - a.size;
+    return 0;
+  });
+  
+  const titleEl = document.getElementById('viewTitle');
+  const countEl = document.getElementById('fileCount');
+  if (currentCategory === 'all') titleEl.textContent = '全部文件';
+  else titleEl.textContent = CATEGORIES[currentCategory]?.name || '文件';
+  if (currentTag) titleEl.textContent += ` · ${currentTag}`;
+  if (currentSearch) titleEl.textContent = `搜索: "${currentSearch}"`;
+  countEl.textContent = `共 ${files.length} 个文件`;
+  
+  const grid = document.getElementById('fileGrid');
+  const empty = document.getElementById('emptyState');
+  
+  if (!files.length) {
+    grid.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  grid.innerHTML = files.map(f => {
+    const cat = CATEGORIES[f.category] || CATEGORIES.other;
+    const date = new Date(f.uploadDate).toLocaleDateString('zh-CN');
+    const size = formatSize(f.size);
+    const tags = (f.tags || []).slice(0, 3).map(t => `<span>${t}</span>`).join('');
+    return `<div class="file-card ${selectedFileId===f.id?'selected':''}" onclick="openDetail('${f.id}')">
+      <div class="file-icon ${f.ext}">${cat.icon}</div>
+      <div class="file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
+      <div class="file-meta"><span>${size}</span><span>${date}</span></div>
+      <div class="file-cat">${cat.icon} ${cat.name}</div>
+      ${tags ? `<div class="file-tags">${tags}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderStats() {
+  const total = allFiles.length;
+  const totalSize = allFiles.reduce((s, f) => s + (f.size || 0), 0);
+  const cats = new Set(allFiles.map(f => f.category)).size;
+  const tags = new Set(allFiles.flatMap(f => f.tags || [])).size;
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${total}</div><div class="stat-label">文件总数</div></div>
+    <div class="stat-card"><div class="stat-val">${formatSize(totalSize)}</div><div class="stat-label">存储大小</div></div>
+    <div class="stat-card"><div class="stat-val">${cats}</div><div class="stat-label">分类数</div></div>
+    <div class="stat-card"><div class="stat-val">${tags}</div><div class="stat-label">标签数</div></div>
+  `;
+}
+
+function updateStorageInfo() {
+  const totalSize = allFiles.reduce((s, f) => s + (f.size || 0), 0);
+  document.getElementById('storageInfo').innerHTML = `
+    已存储 ${allFiles.length} 个文件<br>
+    占用空间: ${formatSize(totalSize)}<br>
+    <span style="font-size:11px;color:var(--text3)">☁️ 数据存储在 Supabase 云端</span>
+  `;
+}
+
+// ============================================================
+// 详情面板
+// ============================================================
+async function openDetail(id) {
+  selectedFileId = id;
+  const file = allFiles.find(f => f.id === id);
+  if (!file) return;
+  
+  document.getElementById('detailName').textContent = file.name;
+  
+  const date = new Date(file.uploadDate).toLocaleString('zh-CN');
+  const cat = CATEGORIES[file.category] || CATEGORIES.other;
+  document.getElementById('detailInfo').innerHTML = `
+    <div class="info-item"><label>文件大小</label><div class="val">${formatSize(file.size)}</div></div>
+    <div class="info-item"><label>文件类型</label><div class="val">${(file.ext||'').toUpperCase()}</div></div>
+    <div class="info-item"><label>上传时间</label><div class="val">${date}</div></div>
+    <div class="info-item"><label>分类置信度</label><div class="val">${Math.round((file.confidence||0) * 100)}%</div></div>
+  `;
+  
+  const catSelect = document.getElementById('detailCat');
+  catSelect.innerHTML = Object.entries(CATEGORIES).map(([k, v]) =>
+    `<option value="${k}" ${file.category===k?'selected':''}>${v.icon} ${v.name}</option>`
+  ).join('');
+  
+  renderDetailTags(file);
+  document.getElementById('detailNotes').value = file.notes || '';
+  await renderPreview(file);
+  
+  document.getElementById('detailOverlay').classList.add('open');
+  document.getElementById('detailPanel').classList.add('open');
+  renderFiles();
+}
+
+function closeDetail() {
+  selectedFileId = null;
+  document.getElementById('detailOverlay').classList.remove('open');
+  document.getElementById('detailPanel').classList.remove('open');
+  renderFiles();
+}
+
+async function renderPreview(file) {
+  const container = document.getElementById('detailPreview');
+  container.innerHTML = '<div style="text-align:center;padding:20px"><span class="loading-spinner"></span> 加载预览...</div>';
+  
+  try {
+    // 获取文件的临时 URL
+    if (file.storagePath) {
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from('kb-files')
+        .createSignedUrl(file.storagePath, 3600);
+      
+      if (urlError) throw urlError;
+      const fileUrl = urlData.signedUrl;
+      
+      if (file.ext === 'pdf') {
+        container.innerHTML = `<iframe src="${fileUrl}"></iframe>`;
+        return;
+      }
+      
+      if (file.ext === 'docx') {
+        try {
+          const resp = await fetch(fileUrl);
+          const buf = await resp.arrayBuffer();
+          const result = await mammoth.convertToHtml({arrayBuffer: buf});
+          container.innerHTML = `<div class="doc-content">${result.value}</div>`;
+          return;
+        } catch(e) { /* fallback */ }
+      }
+    }
+    
+    // Fallback: 显示提取的文本
+    if (file.textContent) {
+      const preview = file.textContent.substring(0, 2000);
+      container.innerHTML = `<div class="doc-content" style="white-space:pre-wrap;font-size:12px;line-height:1.6">${escapeHtml(preview)}${file.textContent.length > 2000 ? '<br><br>... (内容过长，仅显示前2000字)' : ''}</div>`;
+    } else {
+      container.innerHTML = `<div style="text-align:center;color:var(--text3);padding:40px">
+        <div style="font-size:32px;margin-bottom:8px">📄</div>
+        <div>该文件类型暂不支持预览</div>
+        <div style="margin-top:8px"><button class="btn btn-sm btn-ghost" onclick="downloadFile()">下载查看</button></div>
+      </div>`;
+    }
+  } catch(e) {
+    container.innerHTML = `<div style="text-align:center;color:var(--text3);padding:20px">预览加载失败</div>`;
+  }
+}
+
+function renderDetailTags(file) {
+  const container = document.getElementById('detailTags');
+  container.innerHTML = (file.tags || []).map(t =>
+    `<span class="tag">${t}<span class="remove" onclick="removeTagFromFile('${t}')">×</span></span>`
+  ).join('');
+}
+
+// ============================================================
+// 文件操作
+// ============================================================
+async function updateFileCategory() {
+  if (!selectedFileId) return;
+  const newCat = document.getElementById('detailCat').value;
+  try {
+    await updateFileRecord(selectedFileId, { category: newCat });
+    const file = allFiles.find(f => f.id === selectedFileId);
+    if (file) file.category = newCat;
+    renderCategories();
+    renderFiles();
+    showToast('分类已更新');
+  } catch(e) {
+    showToast('更新失败: ' + e.message);
+  }
+}
+
+async function addTagToFile() {
+  const input = document.getElementById('tagInput');
+  const tag = input.value.trim();
+  if (!tag || !selectedFileId) return;
+  
+  const file = allFiles.find(f => f.id === selectedFileId);
+  if (!file) return;
+  if (!file.tags) file.tags = [];
+  if (file.tags.includes(tag)) { input.value = ''; return; }
+  
+  file.tags.push(tag);
+  try {
+    await updateFileRecord(selectedFileId, { tags: file.tags });
+    renderDetailTags(file);
+    renderTags();
+    input.value = '';
+  } catch(e) {
+    file.tags.pop();
+    showToast('添加失败: ' + e.message);
+  }
+}
+
+async function removeTagFromFile(tag) {
+  if (!selectedFileId) return;
+  const file = allFiles.find(f => f.id === selectedFileId);
+  if (!file) return;
+  
+  const idx = (file.tags || []).indexOf(tag);
+  if (idx === -1) return;
+  file.tags.splice(idx, 1);
+  
+  try {
+    await updateFileRecord(selectedFileId, { tags: file.tags });
+    renderDetailTags(file);
+    renderTags();
+  } catch(e) {
+    file.tags.splice(idx, 0, tag);
+    showToast('删除失败: ' + e.message);
+  }
+}
+
+async function saveNotes() {
+  if (!selectedFileId) return;
+  clearTimeout(notesTimer);
+  notesTimer = setTimeout(async () => {
+    const file = allFiles.find(f => f.id === selectedFileId);
+    if (!file) return;
+    const notes = document.getElementById('detailNotes').value;
+    try {
+      await updateFileRecord(selectedFileId, { notes });
+      file.notes = notes;
+    } catch(e) {
+      showToast('备注保存失败: ' + e.message);
+    }
+  }, 800);
+}
+
+async function downloadFile() {
+  if (!selectedFileId) return;
+  const file = allFiles.find(f => f.id === selectedFileId);
+  if (!file || !file.storagePath) { showToast('文件不可用'); return; }
+  
+  try {
+    const { data, error } = await supabase.storage
+      .from('kb-files')
+      .createSignedUrl(file.storagePath, 3600);
+    if (error) throw error;
+    
+    const a = document.createElement('a');
+    a.href = data.signedUrl;
+    a.download = file.name;
+    a.target = '_blank';
+    a.click();
+  } catch(e) {
+    showToast('下载失败: ' + e.message);
+  }
+}
+
+async function deleteFile() {
+  if (!selectedFileId) return;
+  if (!confirm('确定删除这个文件吗？')) return;
+  
+  const file = allFiles.find(f => f.id === selectedFileId);
+  if (!file) return;
+  
+  try {
+    await deleteFileRecord(selectedFileId, file.storagePath);
+    closeDetail();
+    await loadFiles();
+    showToast('文件已删除');
+  } catch(e) {
+    showToast('删除失败: ' + e.message);
+  }
+}
+
+async function reclassifyFile() {
+  if (!selectedFileId) return;
+  const file = allFiles.find(f => f.id === selectedFileId);
+  if (!file) return;
+  
+  const result = classifyFile(file.name, file.textContent || '');
+  file.category = result.category;
+  file.confidence = result.confidence;
+  file.tags = suggestTags(file.name, file.textContent || '');
+  
+  try {
+    await updateFileRecord(selectedFileId, {
+      category: file.category,
+      confidence: file.confidence,
+      tags: file.tags
+    });
+    openDetail(selectedFileId);
+    await loadFiles();
+    showToast(`已重新分类为: ${CATEGORIES[result.category].name}`);
+  } catch(e) {
+    showToast('重新分类失败: ' + e.message);
+  }
+}
+
+// ============================================================
+// 筛选 & 搜索
+// ============================================================
+function filterCategory(cat) {
+  currentCategory = cat;
+  currentTag = null;
+  currentSearch = '';
+  document.getElementById('searchInput').value = '';
+  renderCategories();
+  renderTags();
+  renderFiles();
+}
+
+function filterTag(tag) {
+  currentTag = currentTag === tag ? null : tag;
+  renderTags();
+  renderFiles();
+}
+
+document.getElementById('searchInput').addEventListener('input', function(e) {
+  currentSearch = e.target.value.trim();
+  renderFiles();
+});
+
+// ============================================================
+// 工具函数
+// ============================================================
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+(async function init() {
+  const connected = await checkConnection();
+  if (connected) {
+    await loadFiles();
+  } else {
+    showToast('无法连接 Supabase，请检查配置');
+  }
+})();
+</script>
+</body>
+</html>
